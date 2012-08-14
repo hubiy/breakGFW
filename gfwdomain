@@ -1,0 +1,19 @@
+#!/bin/sh
+
+#mkdir -p /etc/resolver
+#rm -f /etc/resolver/*.*
+#echo "nameserver 8.8.8.8" > /etc/resolver/default
+#echo "nameserver 8.8.4.4" >> /etc/resolver/default
+
+curl -o /tmp/gfwlist.tmp http://autoproxy-gfwlist.googlecode.com/svn/trunk/gfwlist.txt
+
+if [ "0"="$?" ]; then
+    base64 -D -i /tmp/gfwlist.tmp -o /tmp/gfwlist.decode
+    if [ "0"="$?" ]; then
+        cat /tmp/gfwlist.decode | grep -Eo '\w+(\.\w+)+' | sort -u > gfw_domain.lst
+        cat gfw_domain.lst | while read domain
+        do
+            echo $domain
+        done
+    fi
+fi

@@ -136,6 +136,16 @@ delete_route() {
 	/sbin/route delete -net $1
 }
 
+delete_line() {
+	file=$1
+	match=$2
+
+	match=${match//\./\\.}
+	match=${match//\//\\\/}
+
+	sed -i '.bak' "/$match/d" $file
+}
+
 add_ip() {
 	check_empty ip $1
 
@@ -155,7 +165,8 @@ delete_ip() {
 
         ip=$(parse_ip $1)
         if [ "0" = "$?" ]; then
-                echo "delete ip $ip"
+                delete_line "$SH_PATH/redirect_ip.lst" "$ip"
+		echo "delete ip $ip"
                 delete_route $ip
         else
                 echo $ip
@@ -165,13 +176,13 @@ delete_ip() {
 
 add_domain() {
 	check_empty domain $1
-
 	add_resolver $1
 	echo $1 >> "$SH_PATH/redirect_domain.lst"
 }
 
 delete_domain() {
 	check_empty domain $1
+	delete_line "$SH_PATH/redirect_domain.lst" "$1"
 	delete_resolver $1
 }
 
@@ -269,13 +280,27 @@ stop() {
 	echo "You are back to the GWF"
 }
 
+auto_start() {
+        while [ 0 ]; do
+                ping -c 1 www.baidu.com
+                if [ "0" = "$?" ]; then
+                        connect_vpn $1
+
+                        echo "Welcome to internet"
+
+                        break
+                else
+                        echo -n .
+                        sleep 1
+                fi
+        done
+}
+
 auto() {
 	while [ 0 ]; do
 		set_vpn_gateway
                 if [ "" = "$vpn_gateway" ]; then
-                	delete_china_ip
-                        delete_redirect_ip
-			start $1
+			auto_start $1
 		else
 			sleep 1
                 fi
