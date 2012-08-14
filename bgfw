@@ -1,0 +1,351 @@
+#!/bin/bash
+#
+# 解决翻墙时访问国内网站经过VPN转发的问题
+# 开机自动启动VPN，国内IP不经过VPN，不同域名利用不用的DNS服务器解析
+#
+
+RETVAL=0
+
+gateway=""
+vpn_gateway=""
+
+SH_PATH=$(dirname "$0")
+
+check_empty() {
+        if [ "" = "$2" ]; then
+                echo "$1 is empty"
+                exit 1
+        fi
+}
+
+check_resolver() {
+	if [ ! -d /etc/resolver ]; then
+    		mkdir /etc/resolver
+		echo "nameserver 8.8.8.8" > /etc/resolver/default
+		echo "nameserver 8.8.4.4" >> /etc/resolver/default
+	fi
+}
+
+parse_ip() {
+	ip=$(echo "$1" | awk -F '/' '{print ($2+0)"."$1}' | awk -F '.' '{
+		ip1=$2+0;
+		ip2=$3+0;
+		ip3=$4+0;
+		ip4=$5+0;
+		netmask=$1+0
+		if(netmask==0){netmask=32}
+		ip=ip1"."ip2"."ip3"."ip4"/"netmask;
+		print ip
+	}')
+
+	if [ "0.0.0.0/32" = "$ip" ]; then
+                echo "ip format error"
+                exit 1
+        else
+                echo $ip
+                exit 0
+        fi
+}
+
+add_china_ip() {
+	set_gateway
+	if [ "" = "$gateway" ]; then
+		echo "no available gateway"
+		exit 1
+	fi
+
+	cat "$SH_PATH/china_ipv4.lst"  | while read ip
+	do
+		ip=$(parse_ip $ip)
+        	/sbin/route add -net $ip -gateway $gateway
+	done
+}
+
+delete_china_ip() {
+        cat "$SH_PATH/china_ipv4.lst" | while read ip
+        do
+                ip=$(parse_ip $ip)
+                delete_route $ip
+        done
+}
+
+add_redirect_ip() {
+	if [ -f "$SH_PATH/redirect_ip.lst" ]; then
+        	set_gateway
+		if [ "" = "$gateway" ]; then
+                	echo "no available gateway"
+                	exit 1
+        	fi
+
+        	cat "$SH_PATH/redirect_ip.lst"  | while read ip
+        	do
+                	ip=$(parse_ip $ip)
+                	/sbin/route add -net $ip -gateway $gateway
+        	done
+	fi
+}
+
+delete_redirect_ip() {
+	if [ -f "$SH_PATH/redirect_ip.lst" ]; then
+        	cat "$SH_PATH/redirect_ip.lst" | while read ip
+        	do
+                	ip=$(parse_ip $ip)
+                	delete_route $ip
+        	done
+	fi
+}
+
+add_redirect_domain() {
+        if [ -f "$SH_PATH/redirect_domain.lst" ]; then
+                cat "$SH_PATH/redirect_domain.lst"  | while read domain
+                do
+			add_resolver $domain
+                done
+        fi
+}
+
+delete_redirect_domain() {
+	if [ -f "$SH_PATH/redirect_domain.lst" ]; then
+                cat "$SH_PATH/redirect_domain.lst"  | while read domain
+                do
+                        delete_resolver $domain
+                done
+        fi
+}
+
+set_gateway() {
+	gateway=`netstat -nr | grep '^default.*UGSc.*en' | head -n 1 | awk '{print $2}'`
+}
+
+set_vpn_gateway() {
+	vpn_gateway=`netstat -nr | grep '^default.*UGSc.*ppp' | head -n 1 | awk '{print $2}'`
+}
+
+add_route() {
+	check_empty route $1
+	set_gateway
+	if [ "" = "$gateway" ]; then
+                echo "no available gateway"
+                exit 1
+        fi
+	/sbin/route add -net $1 -gateway $gateway
+}
+
+delete_route() {
+	check_empty route $1
+	/sbin/route delete -net $1
+}
+
+add_ip() {
+	check_empty ip $1
+
+	ip=$(parse_ip $1)
+	if [ "0" = "$?" ]; then
+		echo $ip >> "$SH_PATH/redirect_ip.lst"
+		echo "add ip $ip"
+		add_route $ip
+	else
+		echo $ip
+		exit 1
+	fi
+}
+
+delete_ip() {
+	check_empty ip $1
+
+        ip=$(parse_ip $1)
+        if [ "0" = "$?" ]; then
+                echo "delete ip $ip"
+                delete_route $ip
+        else
+                echo $ip
+                exit 1
+        fi
+}
+
+add_domain() {
+	check_empty domain $1
+
+	add_resolver $1
+	echo $1 >> "$SH_PATH/redirect_domain.lst"
+}
+
+delete_domain() {
+	check_empty domain $1
+	delete_resolver $1
+}
+
+add_resolver() {
+	check_empty domain $1
+
+	check_resolver
+
+	if [ ! -f "/etc/resolver/$1" ]; then
+		ln -s /etc/resolver/default "/etc/resolver/$1"
+	fi
+
+	echo "add resolver $1"
+}
+
+delete_resolver() {
+	check_empty domain $1
+#	sed "/^\$domain$/d" "$SH_PATH/redirect_domain.lst"
+	rm -f "/etc/resolver/$1"
+	
+	echo "delete resolver $1"
+}
+
+connect_vpn() {
+	if [ "" = "$1" ]; then
+		vpn="breakGFW"
+	else
+		vpn=$1
+	fi
+
+	networksetup -connectpppoeservice $vpn
+	
+	start_time=0	
+	
+	echo "start connect vpn"
+
+	while [ 0 ]; do
+		end_time=$(date +%s)
+		timeout=`expr $end_time - $start_time`
+		if [ $timeout -gt 10 ]; then
+        		networksetup -connectpppoeservice $vpn
+			start_time=$(date +%s)
+		fi
+
+		set_vpn_gateway
+		if [ "" = "$vpn_gateway" ]; then
+			echo -n .
+			sleep 1
+		else
+			echo ""
+			echo "connect vpn successful"
+            		break
+		fi
+	done
+}
+
+disconnect_vpn() {
+        if [ "" = "$1" ]; then
+                vpn="breakGFW"
+        else
+                vpn=$1
+        fi
+        
+        networksetup -disconnectpppoeservice $vpn
+	
+	echo "disconnect vpn"
+	
+        delete_redirect_domain
+        delete_china_ip
+        delete_redirect_ip
+}
+
+start() {
+	while [ 0 ]; do
+		ping -c 1 www.baidu.com
+		if [ "0" = "$?" ]; then
+			connect_vpn $1
+
+			add_redirect_domain
+			add_china_ip
+                        add_redirect_ip
+			
+			echo "Welcome to internet"
+
+			break
+		else
+			echo -n .
+			sleep 1
+		fi
+	done
+}
+
+stop() {
+	disconnect_vpn $1
+	echo "You are back to the GWF"
+}
+
+auto() {
+	while [ 0 ]; do
+		set_vpn_gateway
+                if [ "" = "$vpn_gateway" ]; then
+                	delete_china_ip
+                        delete_redirect_ip
+			start $1
+		else
+			sleep 1
+                fi
+        done
+}
+
+case "$1" in
+	add)
+		case "$2" in
+			ip)
+				if [ "" = "$3" ]; then
+					add_china_ip
+					add_redirect_ip
+				else
+					add_ip $3
+				fi
+				;;
+			domain)
+				if [ "" = "$3" ]; then
+                                        add_redirect_domain
+                                else
+					add_domain $3
+				fi
+				;;
+			route)
+				add_route $3
+				;;
+			*)
+				echo $"Usage: $0 $1 {ip|domain|route}"
+		esac
+		;;
+	delete)
+		case "$2" in
+                        ip)
+				if [ "" = "$3" ]; then
+                                        delete_china_ip
+                                        delete_redirect_ip
+                                else
+                                	delete_ip $3
+				fi
+                                ;;
+                        domain)
+				if [ "" = "$3" ]; then
+                                        delete_redirect_domain
+                                else
+                                	delete_domain $3
+				fi
+                                ;;
+                        route)
+                                delete_route $3
+                                ;;
+                        *)
+                                echo $"Usage: $0 $1 {ip|domain|route}"
+                esac
+		;;
+	start)
+		start $2
+		;;
+	stop)
+		stop $2
+		;;
+	restart)
+		stop $2
+		start $2
+		;;
+	auto)
+		auto $2
+		;;
+	*)
+		echo $"Usage: $0 {start|stop|restart|auto|add|delete}"
+		RETVAL=2
+esac
+exit $RETVAL
