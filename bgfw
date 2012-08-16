@@ -18,14 +18,6 @@ check_empty() {
         fi
 }
 
-check_resolver() {
-	if [ ! -d /etc/resolver ]; then
-    		mkdir /etc/resolver
-		echo "nameserver 8.8.8.8" > /etc/resolver/default
-		echo "nameserver 8.8.4.4" >> /etc/resolver/default
-	fi
-}
-
 parse_ip() {
 	ip=$(echo "$1" | awk -F '/' '{print ($2+0)"."$1}' | awk -F '.' '{
 		ip1=$2+0;
@@ -95,24 +87,6 @@ delete_redirect_ip() {
 	fi
 }
 
-add_redirect_domain() {
-        if [ -f "$SH_PATH/redirect_domain.lst" ]; then
-                cat "$SH_PATH/redirect_domain.lst"  | while read domain
-                do
-			add_resolver $domain
-                done
-        fi
-}
-
-delete_redirect_domain() {
-	if [ -f "$SH_PATH/redirect_domain.lst" ]; then
-                cat "$SH_PATH/redirect_domain.lst"  | while read domain
-                do
-                        delete_resolver $domain
-                done
-        fi
-}
-
 set_gateway() {
 	gateway=`netstat -nr | grep '^default.*UGSc.*en' | head -n 1 | awk '{print $2}'`
 }
@@ -174,36 +148,18 @@ delete_ip() {
         fi
 }
 
-add_domain() {
-	check_empty domain $1
-	add_resolver $1
-	echo $1 >> "$SH_PATH/redirect_domain.lst"
+add_nameserver_ip() {
+        awk '/^nameserver/{print $2}' /etc/resolv.conf | while read ip
+        do
+		add_ip $ip
+        done
 }
 
-delete_domain() {
-	check_empty domain $1
-	delete_line "$SH_PATH/redirect_domain.lst" "$1"
-	delete_resolver $1
-}
-
-add_resolver() {
-	check_empty domain $1
-
-	check_resolver
-
-	if [ ! -f "/etc/resolver/$1" ]; then
-		ln -s /etc/resolver/default "/etc/resolver/$1"
-	fi
-
-	echo "add resolver $1"
-}
-
-delete_resolver() {
-	check_empty domain $1
-#	sed "/^\$domain$/d" "$SH_PATH/redirect_domain.lst"
-	rm -f "/etc/resolver/$1"
-	
-	echo "delete resolver $1"
+delete_nameserver_ip() {
+        awk '/^nameserver/{print $2}' /etc/resolv.conf | while read ip
+        do
+                delete_ip $ip
+        done
 }
 
 connect_vpn() {
@@ -250,21 +206,25 @@ disconnect_vpn() {
 	
 	echo "disconnect vpn"
 	
-        delete_redirect_domain
         delete_china_ip
         delete_redirect_ip
 }
 
+
 start() {
 	while [ 0 ]; do
-		ping -c 1 www.baidu.com
-		if [ "0" = "$?" ]; then
-			connect_vpn $1
-
-			add_redirect_domain
+		if [ "0" != "`nslookup 8.8.8.8 | grep google-public-dns-a.google.com | wc -l`" ]; then
+			
 			add_china_ip
                         add_redirect_ip
+
+			connect_vpn $1			
 			
+			add_nameserver_ip
+			if [ "0" = "`nslookup 8.8.8.8 | grep google-public-dns-a.google.com | wc -l`" ]; then
+				delete_nameserver_ip
+			fi
+
 			echo "Welcome to internet"
 
 			break
@@ -282,8 +242,7 @@ stop() {
 
 auto_start() {
         while [ 0 ]; do
-                ping -c 1 www.baidu.com
-                if [ "0" = "$?" ]; then
+                if [ "0" != "`nslookup 8.8.8.8 | grep google-public-dns-a.google.com | wc -l`" ]; then
                         connect_vpn $1
 
                         echo "Welcome to internet"
@@ -318,18 +277,11 @@ case "$1" in
 					add_ip $3
 				fi
 				;;
-			domain)
-				if [ "" = "$3" ]; then
-                                        add_redirect_domain
-                                else
-					add_domain $3
-				fi
-				;;
 			route)
 				add_route $3
 				;;
 			*)
-				echo $"Usage: $0 $1 {ip|domain|route}"
+				echo $"Usage: $0 $1 {ip|route}"
 		esac
 		;;
 	delete)
@@ -342,18 +294,11 @@ case "$1" in
                                 	delete_ip $3
 				fi
                                 ;;
-                        domain)
-				if [ "" = "$3" ]; then
-                                        delete_redirect_domain
-                                else
-                                	delete_domain $3
-				fi
-                                ;;
                         route)
                                 delete_route $3
                                 ;;
                         *)
-                                echo $"Usage: $0 $1 {ip|domain|route}"
+                                echo $"Usage: $0 $1 {ip|route}"
                 esac
 		;;
 	start)
