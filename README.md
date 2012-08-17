@@ -63,6 +63,9 @@ breakGFW - 提高Mac用户翻墙体验
     #从路由表删除网站
     #从路由表中删除域名解析到的IP，并从本地网站记录中删除网站。
     sudo bfw delete site <www.site.com>
+    
+    #查看当前的直连网站
+    bfw list ip
 
 ### 强烈推荐
 
@@ -73,7 +76,7 @@ breakGFW - 提高Mac用户翻墙体验
 
 版本支持
 ---
->因笔者使用Mac，故没有编写Linux和Windows版本，后续有必要的话，可考虑移植到Linux和Windows
+>笔者使用Mac，故没有编写Linux和Windows版本，后续有必要的话，可考虑移植到Linux和Windows。
 
 后记
 ---
@@ -83,5 +86,4 @@ breakGFW - 提高Mac用户翻墙体验
 反馈
 ---
  - Bug：<https://github.com/puwaifu/breakGFW/issues>
- - Email：<puwaifu@gmail.com>
  - Twitter: <http://twitter.com/#!/puwaifu>
