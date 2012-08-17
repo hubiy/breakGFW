@@ -1,6 +1,4 @@
 #!/bin/bash
-#
-#
 
 RETVAL=0
 
@@ -192,14 +190,14 @@ delete_site() {
 add_nameserver_ip() {
         awk '/^nameserver/{print $2}' /etc/resolv.conf | while read ip
         do
-		add_ip $ip
+		add_route $ip
         done
 }
 
 delete_nameserver_ip() {
         awk '/^nameserver/{print $2}' /etc/resolv.conf | while read ip
         do
-                delete_ip $ip
+                delete_route $ip
         done
 }
 
@@ -243,7 +241,8 @@ disconnect_vpn() {
                 vpn=$1
         fi
         
-        networksetup -disconnectpppoeservice $vpn
+	delete_nameserver_ip
+	killall -HUP pppd
 	
 	echo "disconnect vpn"
 	
@@ -254,15 +253,15 @@ disconnect_vpn() {
 
 start() {
 	while [ 0 ]; do
-		if [ "0" != "`nslookup 8.8.8.8 | grep google-public-dns-a.google.com | wc -l`" ]; then
+		if [ "8.8.8.8.in-addr.arpa" = "`nslookup 8.8.8.8 | grep google-public-dns-a.google.com | awk '{print $1}'`" ]; then	
 			
 			add_china_ip
                         add_redirect_ip
 
-			connect_vpn $1			
+			connect_vpn $1
 			
 			add_nameserver_ip
-			if [ "0" = "`nslookup 8.8.8.8 | grep google-public-dns-a.google.com | wc -l`" ]; then
+			if [ "8.8.8.8.in-addr.arpa" != "`nslookup 8.8.8.8 | grep google-public-dns-a.google.com | awk '{print $1}'`" ]; then	
 				delete_nameserver_ip
 			fi
 
@@ -283,7 +282,7 @@ stop() {
 
 auto_start() {
         while [ 0 ]; do
-                if [ "0" != "`nslookup 8.8.8.8 | grep google-public-dns-a.google.com | wc -l`" ]; then
+                if [ "8.8.8.8.in-addr.arpa" = "`nslookup 8.8.8.8 | grep google-public-dns-a.google.com | awk '{print $1}'`" ]; then
                         connect_vpn $1
 
                         echo "Welcome to internet"
