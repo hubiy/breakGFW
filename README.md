@@ -1,4 +1,4 @@
-breakGFW - 提高墙内Mac用户翻墙体验
+breakGFW - 提高Mac用户翻墙体验
 ===
 
 
