@@ -1,15 +1,24 @@
 #!/bin/bash
 #
-# 解决翻墙时访问国内网站经过VPN转发的问题
-# 开机自动启动VPN，国内IP不经过VPN，不同域名利用不用的DNS服务器解析
 #
 
 RETVAL=0
 
+realpath="`ls -l $0 | awk -F '> ' '{print $2}'`"
+
+if [ "" = "$realpath" ]; then
+	SH_PATH=$(cd "$(dirname $0)"; pwd)
+else
+        SH_PATH=$(dirname $realpath)
+fi
+
 gateway=""
 vpn_gateway=""
 
-SH_PATH=$(dirname "$0")
+install() {
+	sudo ln -sf "$SH_PATH/bfw" /usr/bin/bfw
+	echo "breadGFW installed successful"
+}
 
 check_empty() {
         if [ "" = "$2" ]; then
@@ -120,6 +129,10 @@ delete_line() {
 	sed -i '.bak' "/$match/d" $file
 }
 
+list_ip() {
+        cat "$SH_PATH/redirect_ip.lst"
+}
+
 add_ip() {
 	check_empty ip $1
 
@@ -146,6 +159,34 @@ delete_ip() {
                 echo $ip
                 exit 1
         fi
+}
+
+list_site() {
+        cat "$SH_PATH/redirect_site.lst"
+}
+
+add_site() {
+	check_empty domain $1
+	
+	echo $1 >> "$SH_PATH/redirect_site.lst"
+        echo "add domain $1"
+	
+	nslookup $1 | awk '/^Address.*[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$/{print $2}' | while read ip
+        do
+                add_ip $ip
+        done
+}
+
+delete_site() {
+	check_empty domain $1
+
+        delete_line "$SH_PATH/redirect_site.lst" "$1"
+        echo "delete domain $1"
+	
+	nslookup $1 | awk '/^Address.*[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$/{print $2}' | while read ip
+        do
+                delete_ip $ip
+        done
 }
 
 add_nameserver_ip() {
@@ -267,8 +308,27 @@ auto() {
 }
 
 case "$1" in
+	list)
+                case "$2" in
+                        site)
+				echo "redirect sites"
+                                list_site
+                                ;;
+                        ip)
+				echo "redirect ips"
+				list_ip
+                                ;;
+                        *)
+				echo "redirect ips and sites"
+				list_ip
+				list_site
+                esac
+                ;;
 	add)
 		case "$2" in
+			site)
+				add_site $3
+				;;
 			ip)
 				if [ "" = "$3" ]; then
 					add_china_ip
@@ -286,6 +346,9 @@ case "$1" in
 		;;
 	delete)
 		case "$2" in
+			site)
+				delete_site $3
+				;;
                         ip)
 				if [ "" = "$3" ]; then
                                         delete_china_ip
@@ -314,8 +377,11 @@ case "$1" in
 	auto)
 		auto $2
 		;;
+	install)
+		install
+		;;
 	*)
-		echo $"Usage: $0 {start|stop|restart|auto|add|delete}"
+		echo $"Usage: $0 {install|start|stop|restart|auto|list|add|delete}"
 		RETVAL=2
 esac
 exit $RETVAL
