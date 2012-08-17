@@ -67,8 +67,8 @@ breakGFW - 提高Mac用户翻墙体验
 ### 强烈推荐
 
     #强烈推荐添加自动启动并监控VPN状态，一劳永逸。还有附加的好处，使用 add、delete 指令时，无需输入烦人的sudo。
-    sudo echo "bfw start" >> /etc/rc.local
-    sudo echo "bfw auto" >> /etc/rc.local
+    echo "bfw start" | sudo tee -a /etc/rc.local
+    echo "bfw auto" | sudo tee -a /etc/rc.local
 
 
 版本支持
