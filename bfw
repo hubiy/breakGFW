@@ -124,10 +124,11 @@ delete_line() {
 	match=${match//\./\\.}
 	match=${match//\//\\\/}
 
-	sed -i '.bak' "/$match/d" $file
+	sed -i '.bak' "/^$match$/d" $file
 }
 
 list_ip() {
+	echo "自定义的直达IP地址（数据包不经过VPN发送）"
         cat "$SH_PATH/redirect_ip.lst"
 }
 
@@ -160,46 +161,73 @@ delete_ip() {
 }
 
 list_site() {
+	echo "自定义的直达网址（数据包不经过VPN发送）"
         cat "$SH_PATH/redirect_site.lst"
 }
 
 add_site() {
-	check_empty domain $1
+	check_empty site $1
 	
 	echo $1 >> "$SH_PATH/redirect_site.lst"
-        echo "add domain $1"
+        echo "add site $1"
 	
 	nslookup $1 | awk '/^Address.*[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$/{print $2}' | while read ip
         do
+		echo "$1 $ip" >> "$SH_PATH/redirect_site_ip.lst"
                 add_ip $ip
         done
 }
 
 delete_site() {
-	check_empty domain $1
+	check_empty site $1
 
         delete_line "$SH_PATH/redirect_site.lst" "$1"
-        echo "delete domain $1"
-	
-	nslookup $1 | awk '/^Address.*[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$/{print $2}' | while read ip
+        echo "delete site $1"
+
+	cat "$SH_PATH/redirect_site_ip.lst" | grep "^$1" | awk '/[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$/{print $2}' | while read ip
         do
+		echo "delete $site $ip"
                 delete_ip $ip
         done
+	
+
+	match=$1
+	match=${match//\./\\.}
+	match=${match//\//\\\/}
+
+	sed -i '.bak' "/^$match/d" "$SH_PATH/redirect_site_ip.lst" 
 }
 
-add_nameserver_ip() {
+list_domain() {
+	echo "自定义通过墙外DNS服务器解析的域名"
+        cat "$SH_PATH/break_domain.lst"
+}
+
+add_domain() {
+        check_empty domain $1
+        echo $1 >> "$SH_PATH/break_domain.lst"
+	echo "add domain $1"
+	
+	restart_resolver
+}
+
+delete_domain() {
+        check_empty domain $1
+        delete_line "$SH_PATH/gfw_domain.lst" "$1"
+        delete_line "$SH_PATH/break_domain.lst" "$1"
+	echo "delete domain $1"
+
+	restart_resolver
+}
+
+save_nameserver_ip() {
+        rm -f "$SH_PATH/detected_resolv.conf"
         awk '/^nameserver/{print $2}' /etc/resolv.conf | while read ip
         do
-		add_route $ip
+		echo $ip >> "$SH_PATH/detected_resolv.conf"
         done
 }
 
-delete_nameserver_ip() {
-        awk '/^nameserver/{print $2}' /etc/resolv.conf | while read ip
-        do
-                delete_route $ip
-        done
-}
 
 connect_vpn() {
 	if [ "" = "$1" ]; then
@@ -241,15 +269,25 @@ disconnect_vpn() {
                 vpn=$1
         fi
         
-	delete_nameserver_ip
 	killall -HUP pppd
 	
 	echo "disconnect vpn"
-	
-        delete_china_ip
-        delete_redirect_ip
 }
 
+start_resolver() {
+	echo "start resolver"
+	sudo twistd --pidfile="$SH_PATH/resolver.pid" --logfile=/dev/null -y "$SH_PATH/resolver.py"
+}
+
+stop_resolver() {
+	kill `cat "$SH_PATH/resolver.pid"`
+        echo "stop resolver"
+}
+
+restart_resolver() {
+	stop_resolver
+	start_resolver
+}
 
 start() {
 	while [ 0 ]; do
@@ -257,14 +295,12 @@ start() {
 			
 			add_china_ip
                         add_redirect_ip
+			
+			save_nameserver_ip
+			start_resolver
 
 			connect_vpn $1
 			
-			add_nameserver_ip
-			if [ "8.8.8.8.in-addr.arpa" != "`nslookup 8.8.8.8 | grep google-public-dns-a.google.com | awk '{print $1}'`" ]; then	
-				delete_nameserver_ip
-			fi
-
 			echo "Welcome to internet"
 
 			break
@@ -277,13 +313,20 @@ start() {
 
 stop() {
 	disconnect_vpn $1
-	echo "You are back to the GWF"
+
+	delete_china_ip
+        delete_redirect_ip
+
+	stop_resolver
+
+	echo "You are back to the GFW"
 }
 
 auto_start() {
         while [ 0 ]; do
                 if [ "8.8.8.8.in-addr.arpa" = "`nslookup 8.8.8.8 | grep google-public-dns-a.google.com | awk '{print $1}'`" ]; then
-                        connect_vpn $1
+			
+			connect_vpn $1
 
                         echo "Welcome to internet"
 
@@ -309,58 +352,63 @@ auto() {
 case "$1" in
 	list)
                 case "$2" in
+			domain)
+				list_domain
+				;;
                         site)
-				echo "redirect sites"
                                 list_site
                                 ;;
                         ip)
-				echo "redirect ips"
 				list_ip
                                 ;;
                         *)
-				echo "redirect ips and sites"
-				list_ip
-				list_site
+				echo $"Usage: $0 $1 {domain|site|ip}"
                 esac
                 ;;
 	add)
 		case "$2" in
+			domain)
+				add_domain $3
+				;;
 			site)
 				add_site $3
 				;;
 			ip)
+				add_ip $3
+				;;
+			route)
 				if [ "" = "$3" ]; then
 					add_china_ip
 					add_redirect_ip
 				else
-					add_ip $3
+					add_route $3
 				fi
 				;;
-			route)
-				add_route $3
-				;;
 			*)
-				echo $"Usage: $0 $1 {ip|route}"
+				echo $"Usage: $0 $1 {domain|site|ip|route}"
 		esac
 		;;
 	delete)
 		case "$2" in
+			domain)
+				delete_domain $3
+				;;
 			site)
 				delete_site $3
 				;;
                         ip)
+				delete_ip $3
+                                ;;
+                        route)
 				if [ "" = "$3" ]; then
                                         delete_china_ip
                                         delete_redirect_ip
                                 else
-                                	delete_ip $3
+                                	delete_route $3
 				fi
                                 ;;
-                        route)
-                                delete_route $3
-                                ;;
                         *)
-                                echo $"Usage: $0 $1 {ip|route}"
+                                echo $"Usage: $0 $1 {domain|site|ip|route}"
                 esac
 		;;
 	start)

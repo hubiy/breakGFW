@@ -12,27 +12,38 @@ breakGFW - 提高Mac用户翻墙体验
 ---
   - 建立VPN连接后，让VPN接管所有的网络流量；
   - 添加天网路由表，访问国内网络不经过VPN；
-  - VPN的nameserver一般会默认为国外的IP地址，如Google DNS或openDNS，解析域名的数据包会经过VPN线路发送，对于大型站点，解析到的IP地址往往不是离访问者物理距离最近的IP，所以，需要把nameserver地址也增加进路由表，这样就能解析到最优的IP地址。大家可能会问，这样不会导致国外的域名解析不准确么？不过好在被GFW的域名，一般是不会在中国部署服务器的，哈哈；
-  - 对于国外一些没有被GFW的站点、而对访问者来说又比较频繁的网站，让这部分站点直接加入路由表，避免经过VPN转发；
+  - 针对不同的域名利用不同的nameserver解析，这样就国内网站就可以解析到最优IP；
+  - 对于国外一些没有被GFW的站点、而对访问者来说又比较频繁的网站，访问这部分网站不经过VPN转发；
 
 
- 警告
+警告
 ---
 使用此工具后，访问国内网站会暴露自己真实的IP地址，请慎重使用此工具。
 
 
 ### 安装
+    #此工具利用了Python的Twisted库来建立本地的DNS Resolver，请确保本机安装了Python
+    #如果没有安装Twister，请按如下步骤安装Twisted
+    curl -o Twisted-12.1.0.tar.bz2 http://twistedmatrix.com/Releases/Twisted/12.1/Twisted-12.1.0.tar.bz2
+    tar jxvf Twisted-12.1.0.tar.bz2
+    cd Twisted-12.1.0
+    sudo python setup.py install
+    
+    #安装breakGFW
     git clone https://github.com/puwaifu/breakGFW.git
-    cd breakGFW
-    sudo ./bfw install
+    sudo breakGFW/bfw install
 注意：命令行工具需要使用breakGFW目录，在卸载之前，请不要删除该目录。
 
 
 ### 使用
 
-    #首先，在网络设置中，添加一个VPN，服务名为 breakGFW，让所有数据经过VPN转发。服务名也可以是其他名字，不过这样的话在后续的命令行工具中，就需要指定服务名。
+>翻墙默认域名解析解析服务器为8.8.8.8和8.8.4.4，如果需要修改，请自行编辑 breakGFW/free_resolv.conf文件。
 
-    #启动
+>国内域名解析服务器会动态获取以太网域名服务解析器，在start指令中，会在vpn启动前复制/etc/resolv.conf中的记录，为以防万一，请自行新建国内域名解析服务器配置文件 breakGFW/china_resolv.conf，并将你所知道的你本地的域名解析服务器IP地址增加进去。
+
+>在启动breakGFW前，请先在网络设置中，添加一个VPN，服务名为 breakGFW，在高级里配置设置首选DNS服务器地址为 127.0.0.1，并且选择经由VPN发送所有网络数据。服务以也可以是其他名字，不过这样在后续的命令行工具中，就需要指定服务名。建议用默认服务名。
+
+    #启动breakGFW
     <service name> 为你添加的服务名，如果不传递服务名，默认为breakGFW
     sudo bfw start [service name]
 
@@ -44,46 +55,76 @@ breakGFW - 提高Mac用户翻墙体验
 
     #重启
     sudo bfw restart [service name]
+    
+    #添加域名
+    #如果你确信某个域名的解析被污染或者解析的IP不正确，你可以通过该命令增加到系统中，让可靠的域名服务器来解析
+    sudo bfw add domain <domain.com>
 
-    #添加指定的IP或者网段到路由表
-    #如果不指定IP，则添加所有天网IP段和用户添加的IP到路由表中。新增加的IP地址会记录在本地文件中，下次无需再次添加。
-    sudo bfw add ip <ip or net>
+    #删除域名
+    sudo bfw delete <domain.com>
 
-    #从路由表中删除IP
-    #如果不指定IP，则从路由表删除所有天网IP段和用户添加的IP。指定IP后，只删除对应的IP，并且会从本地IP记录中删除IP
-    sudo bfw delete ip [ip or net]
+    #查看域名列表
+    bfw list domain
 
-    #查看当前的直连IP
-    bfw list ip
-
-    #添加指定的网站到路由表
-    #解析到的多个IP地址，会添加到路由表，对于同一个域名的不同子域名，需要分别添加。域名会记录在本地文件中，下次无需再次添加。
+    #添加网站
+    #有部分网站的DNS解析虽然被污染了，但是IP因为经常变化，没有被墙，在这种情况下，你可以添加该网站到系统中
+    #breakGFW会解析域名对应的IP地址并增加到直连IP设置内，不需要经过VPN中转
+    #增加、删除的网站不会修改该域名的解析方式
     sudo bfw add site <www.site.com>
 
-    #从路由表删除网站
-    #从路由表中删除域名解析到的IP，并从本地网站记录中删除网站。
+    #删除网站
     sudo bfw delete site <www.site.com>
-    
-    #查看当前的直连网站
+
+    #查看网站列表
+    bfw list site
+
+    #添加IP
+    #和 add site 类似，对于一些私有IP，不会被墙，比如自己的个人网站IP，此时可以直接添加进系统避免VPN中转
+    sudo add ip <ipv4 address>
+
+    #删除IP
+    sudo bfw delete ip <ipv4 address>
+
+    #查看IP列表
     bfw list ip
+
+    #添加路由
+    #添加IP或者网络到路由表，避免经过VPN中转
+    #参数为空时会添加天网IP段，自定义的IP地址到路由表
+    sudo bfw add route [ipv4 address or net]
+
+    #删除路由
+    #参数为空时会从路由表中删除天网IP段，自定义的IP地址
+    sudo bfw delete route [ipv4 address or net]
 
 ### 强烈推荐
 
-    #强烈推荐添加自动启动并监控VPN状态，一劳永逸。还有附加的好处，使用 add、delete 指令时，无需输入烦人的sudo。
+    #为了良好的体验，强烈推荐添加自动启动并监控VPN状态，一劳永逸。
     echo "bfw start" | sudo tee -a /etc/rc.local
     echo "bfw auto" | sudo tee -a /etc/rc.local
 
 
 版本支持
 ---
->笔者使用Mac，故没有编写Linux和Windows版本，后续有必要的话，可考虑移植到Linux和Windows。
+>因笔者使用Mac，故没有编写Linux和Windows版本，后续有必要的话，可考虑移植到Linux和Windows。
+
+文件说明
+---
+  - bfw breakGFW主文件
+  - resolver.py dns解析器文件
+  - update_gfw_domain.sh 更新被墙域名，域名地址文件来源于autoproxy数据，建议定期更新
+  - china_ipv4.lst 天网IP段，网络收集，据说来源于dnspod
+  - gfw_domain.lst 被墙域名列表，由 update_gfw_domain.sh 生成
+  - free_resolv.conf 国外域名解析服务器地址，每行一个IP地址
+  - free_resolv.conf breakGFW在运行过程中探测到的国内dns解析服务器地址
+  - china_resolv.conf 国内域名解析服务器地址，如若怀疑dns解析有问题或者受不了国内的404强奸解析，请手动设置DNS服务器为国外IP地址，每行一个IP地址。
 
 后记
 ---
->不用的域名利用不用的nameserver来解析这个问题，本来在\*nix下有完美的解决办法:在/etc/resolver目录下增加不同的域名指示文件，但是Mac并没有使用\*nix内置的resolver，而使用的mDNSResponder又存在BUG，在添加多个域名指示文件后，即会出现无法解析dns的错误，故无法采取此种方法。
+>不用的域名利用不用的nameserver来解析这个问题，本来在\*nix下有完美的解决办法:在/etc/resolver目录下增加不同的域名指示文件，但是Mac并没有使用\*nix内置的resolver，而使用的mDNSResponder又存在BUG，在添加多个域名指示文件后，即会出现无法解析dns的错误，故采取了自行编写域名解析器的方法。
 >另外，自动连接vpn使用的是networksetup -connectpppoeservice，可是同系列的networksetup -disconnectpppoeservice却无法工作，真实相当的奇怪。望不吝赐教。
 
 反馈
 ---
  - Bug：<https://github.com/puwaifu/breakGFW/issues>
- - Twitter: <http://twitter.com/#!/puwaifu>
+ - Twitter: <http://twitter.com/puwaifu>
