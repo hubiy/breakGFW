@@ -61,7 +61,7 @@ breakGFW - 提高Mac用户翻墙体验
     sudo bfw add domain <domain.com>
 
     #删除域名
-    sudo bfw delete <domain.com>
+    sudo bfw delete domain <domain.com>
 
     #查看域名列表
     bfw list domain
@@ -80,7 +80,7 @@ breakGFW - 提高Mac用户翻墙体验
 
     #添加IP
     #和 add site 类似，对于一些私有IP，不会被墙，比如自己的个人网站IP，此时可以直接添加进系统避免VPN中转
-    sudo add ip <ipv4 address>
+    sudo bfw add ip <ipv4 address>
 
     #删除IP
     sudo bfw delete ip <ipv4 address>
@@ -99,7 +99,7 @@ breakGFW - 提高Mac用户翻墙体验
 
 ### 强烈推荐
 
-    #为了良好的体验，强烈推荐添加自动启动并监控VPN状态，一劳永逸。
+    #为了良好的体验，强烈推荐添加自启动并监控VPN状态，一劳永逸。
     echo "bfw start" | sudo tee -a /etc/rc.local
     echo "bfw auto" | sudo tee -a /etc/rc.local
 
@@ -110,14 +110,14 @@ breakGFW - 提高Mac用户翻墙体验
 
 文件说明
 ---
-  - bfw breakGFW主文件
-  - resolver.py dns解析器文件
-  - update_gfw_domain.sh 更新被墙域名，域名地址文件来源于autoproxy数据，建议定期更新
-  - china_ipv4.lst 天网IP段，网络收集，据说来源于dnspod
+  - bfw breakGFW核心文件
+  - resolver.py dns解析器
+  - update_gfw_domain.sh 用于更新被墙域名，域名地址文件来源于autoproxy数据，建议定期更新
+  - china_ipv4.lst 天网IP段，收集于网络，据说来源于dnspod，如有最新IP段，请通知我
   - gfw_domain.lst 被墙域名列表，由 update_gfw_domain.sh 生成
   - free_resolv.conf 国外域名解析服务器地址，每行一个IP地址
-  - free_resolv.conf breakGFW在运行过程中探测到的国内dns解析服务器地址
-  - china_resolv.conf 国内域名解析服务器地址，如若怀疑dns解析有问题或者受不了国内的404强奸解析，请手动设置DNS服务器为国外IP地址，每行一个IP地址。
+  - free_resolv.conf breakGFW在运行过程中探测到的国内dns解析服务器地址，如果发现此文件内容不是你本地的DNS地址，请手动设置china_resolv.conf
+  - china_resolv.conf 国内域名解析服务器地址，如若怀疑dns解析有问题或者受不了国内的404强奸解析，请手动设置DNS服务器为国外IP地址，每行一个IP地址
 
 后记
 ---
