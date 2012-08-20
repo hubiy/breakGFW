@@ -122,7 +122,7 @@ breakGFW - 提高Mac用户翻墙体验
 后记
 ---
 >不同的域名利用不用的nameserver来解析这个问题，本来在\*nix下有完美的解决办法:在/etc/resolver目录下增加不同的域名指示文件，但是Mac并没有使用\*nix内置的resolver，而使用的mDNSResponder又存在BUG，在添加多个域名指示文件后，即会出现无法解析dns的错误，故采取了自行编写域名解析器的方法。
->另外，自动连接vpn使用的是networksetup -connectpppoeservice，可是同系列的networksetup -disconnectpppoeservice却无法工作，真实相当的奇怪。望不吝赐教。
+>另外，自动连接vpn使用的是networksetup -connectpppoeservice，可是同系列的networksetup -disconnectpppoeservice却无法工作，真是相当的奇怪。望不吝赐教。
 
 反馈
 ---
